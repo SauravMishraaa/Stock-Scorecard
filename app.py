@@ -7,11 +7,12 @@ import io
 
 from cleaner import clean_tradebook, split_segments
 from scorecard import compute_equity_scorecard, compute_fo_scorecard, compute_mf_scorecard
-from demo_data import generate_equity_trades, generate_fo_trades, generate_mf_trades
+from demo_data import (generate_equity_trades, generate_fo_trades, generate_mf_trades,
+                       generate_groww_equity_trades, generate_groww_fo_trades, generate_groww_mf_trades)
 
 
 st.set_page_config(
-    page_title="Stock Scorecard - Zerodha",
+    page_title="Stock Scorecard",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -359,20 +360,47 @@ def render_mf_tab(sc):
         fig.update_xaxes(tickprefix="₹")
         st.plotly_chart(fig, use_container_width=True)
 
+BROKER_CONFIG = {
+    "Zerodha": {
+        "subtitle"    : "Zerodha Portfolio Analyser",
+        "caption"     : "Console → Reports → Tradebook",
+        "eq_label"    : "Equity + F&O Tradebook",
+        "fo_label"    : None,
+        "mf_label"    : "Mutual Fund Tradebook",
+        "demo_note"   : "Synthetic Zerodha-style trades (2021–2025).",
+        "start_title" : "Upload your Zerodha tradebook to begin",
+        "start_hint"  : "Console → Reports → Tradebook → Download CSV",
+    },
+    "Groww": {
+        "subtitle"    : "Groww Portfolio Analyser",
+        "caption"     : "Groww app → P&amp;L → Download Report",
+        "eq_label"    : "Stock Tradebook (CSV)",
+        "fo_label"    : "F&O Tradebook (CSV)",
+        "mf_label"    : "Mutual Fund Statement (CSV)",
+        "demo_note"   : "Synthetic Groww-style trades (2021–2025).",
+        "start_title" : "Upload your Groww reports to begin",
+        "start_hint"  : "Groww app → P&amp;L → Download Report",
+    },
+}
 
 with st.sidebar:
     st.markdown('<div class="sc-title" style="font-size:1.4rem;margin-bottom:0.3rem">📊 SCORECARD</div>',
                 unsafe_allow_html=True)
-    st.markdown('<div style="color:#3d3d5e;font-size:0.7rem;letter-spacing:0.12em;'
-                'text-transform:uppercase;margin-bottom:1rem">Zerodha Portfolio Analyser</div>',
+    st.divider()
+    broker = st.selectbox("Broker", ["Zerodha", "Groww"], key="broker")
+    cfg    = BROKER_CONFIG[broker]
+    st.markdown(f'<div style="color:#3d3d5e;font-size:0.7rem;letter-spacing:0.12em;'
+                f'text-transform:uppercase;margin-bottom:0.5rem">{cfg["subtitle"]}</div>',
                 unsafe_allow_html=True)
     st.divider()
     st.markdown("**Upload Tradebook CSVs**")
-    st.caption("Download from Console → Reports → Tradebook")
-    eq_fo_file = st.file_uploader("Equity + F&O Tradebook", type=["csv"], key="eq_fo")
-    mf_file    = st.file_uploader("Mutual Fund Tradebook",  type=["csv"], key="mf")
+    st.caption(cfg["caption"])
+    eq_fo_file = st.file_uploader(cfg["eq_label"], type=["csv"], key="eq_fo")
+    fo_file    = st.file_uploader(cfg["fo_label"], type=["csv"], key="fo") if cfg["fo_label"] else None
+    mf_file    = st.file_uploader(cfg["mf_label"], type=["csv"], key="mf")
     st.divider()
-    use_demo = st.toggle("🎮 Use demo data", value=(eq_fo_file is None and mf_file is None))
+    any_file = eq_fo_file or fo_file or mf_file
+    use_demo = st.toggle("🎮 Use demo data", value=(any_file is None))
     if use_demo:
         st.caption("📌 Showing synthetic demo trades. Upload your CSVs to see real data.")
     st.divider()
@@ -388,14 +416,20 @@ with st.sidebar:
 
 
 @st.cache_data(show_spinner=False)
-def load_and_clean(eq_bytes, mf_bytes):
+def load_and_clean(eq_bytes, fo_bytes, mf_bytes):
     """Load CSVs, clean, and split into EQ / FNO / MF DataFrames."""
     eq_only = fo_only = mf_out = None
 
     if eq_bytes:
         raw  = pd.read_csv(io.BytesIO(eq_bytes), thousands=",")
-        segs = split_segments(raw)       
+        segs = split_segments(raw)
         eq_only = segs.get("EQ")
+        if fo_bytes is None:
+            fo_only = segs.get("FNO")
+
+    if fo_bytes:
+        raw  = pd.read_csv(io.BytesIO(fo_bytes), thousands=",")
+        segs = split_segments(raw)
         fo_only = segs.get("FNO")
 
     if mf_bytes:
@@ -407,19 +441,28 @@ def load_and_clean(eq_bytes, mf_bytes):
 
 
 eq_bytes = eq_fo_file.read() if eq_fo_file else None
+fo_bytes = fo_file.read()    if fo_file    else None
 mf_bytes = mf_file.read()    if mf_file    else None
 
-if use_demo and eq_bytes is None and mf_bytes is None:
+if use_demo and not any([eq_bytes, fo_bytes, mf_bytes]):
     with st.spinner("Generating demo data…"):
-        eq_clean_raw = clean_tradebook(generate_equity_trades())[0]
-        fo_clean_raw = clean_tradebook(generate_fo_trades())[0]
-        mf_clean_raw = clean_tradebook(generate_mf_trades())[0]
+        if broker == "Groww":
+            eq_raw = generate_groww_equity_trades()
+            fo_raw = generate_groww_fo_trades()
+            mf_raw = generate_groww_mf_trades()
+        else:
+            eq_raw = generate_equity_trades()
+            fo_raw = generate_fo_trades()
+            mf_raw = generate_mf_trades()
 
-        eq_only  = eq_clean_raw if (eq_clean_raw is not None and not eq_clean_raw.empty) else None
-        fo_only  = fo_clean_raw if (fo_clean_raw is not None and not fo_clean_raw.empty) else None
+        eq_clean_raw = clean_tradebook(eq_raw)[0]
+        fo_clean_raw = clean_tradebook(fo_raw)[0]
+        mf_clean_raw = clean_tradebook(mf_raw)[0]
+
+        eq_only    = eq_clean_raw if (eq_clean_raw is not None and not eq_clean_raw.empty) else None
+        fo_only    = fo_clean_raw if (fo_clean_raw is not None and not fo_clean_raw.empty) else None
         mf_cleaned = mf_clean_raw
 
-        # also build a combined df for the Raw Data tab
         eq_combined = pd.concat(
             [d for d in [eq_only, fo_only] if d is not None],
             ignore_index=True
@@ -428,7 +471,7 @@ if use_demo and eq_bytes is None and mf_bytes is None:
     demo_mode = True
 else:
     with st.spinner("Cleaning tradebook…"):
-        eq_only, fo_only, mf_cleaned = load_and_clean(eq_bytes, mf_bytes)
+        eq_only, fo_only, mf_cleaned = load_and_clean(eq_bytes, fo_bytes, mf_bytes)
 
     eq_combined = pd.concat(
         [d for d in [eq_only, fo_only] if d is not None],
@@ -448,9 +491,9 @@ st.markdown('<div class="sc-sub">Performance · Risk · Conviction — all in on
             unsafe_allow_html=True)
 
 if demo_mode:
-    st.markdown("""
+    st.markdown(f"""
     <div class="demo-bar">
-    🎮 <strong>Demo mode</strong> — Synthetic Zerodha-style trades (2021-2024).
+    🎮 <strong>Demo mode</strong> — {cfg["demo_note"]}
     Toggle off demo and upload your CSVs in the sidebar.
     </div>
     """, unsafe_allow_html=True)
@@ -511,14 +554,14 @@ if eq_sc or fo_sc or mf_sc:
             st.markdown("**Mutual Fund Tradebook**")
             st.dataframe(mf_cleaned.head(200), use_container_width=True, hide_index=True)
 else:
-    st.markdown("""
+    st.markdown(f"""
     <div style="text-align:center;padding:5rem 0">
         <div style="font-family:'Syne',sans-serif;font-size:1.8rem;font-weight:700;
                     margin-bottom:0.75rem;color:#333">
-            Upload your Zerodha tradebook to begin
+            {cfg["start_title"]}
         </div>
         <div style="font-size:0.8rem;color:#2a2a44;max-width:400px;margin:0 auto;line-height:1.8">
-            Console → Reports → Tradebook → Download CSV<br>
+            {cfg["start_hint"]}<br>
             Then upload in the sidebar.<br><br>
             Or enable <span style="color:#63b3ff">demo data</span> to preview.
         </div>

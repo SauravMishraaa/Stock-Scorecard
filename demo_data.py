@@ -288,6 +288,62 @@ def generate_fo_trades(*args, **kwargs):
 def generate_mf_trades(*args, **kwargs):
     return make_mf(*args, **kwargs)
 
+# Groww-format demo generators
+
+def make_groww_equity(**kwargs) -> pd.DataFrame:
+    """Equity demo data with Groww column names."""
+    df = make_equity(**kwargs)
+    df = df.rename(columns={
+        "symbol"    : "Stock Symbol",
+        "trade_type": "Buy/Sell",
+        "trade_date": "Trade Date",
+        "quantity"  : "Quantity",
+        "price"     : "Price",
+        "exchange"  : "Exchange",
+        "order_id"  : "Trade ID",
+    })
+    keep = ["Stock Symbol", "Exchange", "Buy/Sell", "Quantity", "Price", "Trade Date", "Trade ID"]
+    return df[[c for c in keep if c in df.columns]].copy()
+
+
+def make_groww_fno(**kwargs) -> pd.DataFrame:
+    """F&O demo data with Groww column names."""
+    df = make_fno(**kwargs)
+    df = df.rename(columns={
+        "trade_type"     : "Buy/Sell",
+        "trade_date"     : "Trade Date",
+        "instrument_type": "Option Type",
+        "expiry_date"    : "Expiry Date",
+        "strike_price"   : "Strike Price",
+        "exchange"       : "Exchange",
+        "order_id"       : "Trade ID",
+        "quantity"       : "Quantity",
+        "price"          : "Price",
+    })
+    keep = ["symbol", "Exchange", "Expiry Date", "Strike Price", "Option Type",
+            "Buy/Sell", "Quantity", "Price", "Trade Date", "Trade ID"]
+    return df[[c for c in keep if c in df.columns]].copy()
+
+
+def make_groww_mf(**kwargs) -> pd.DataFrame:
+    """MF demo data with Groww column names."""
+    df = make_mf(**kwargs)
+    df = df.rename(columns={
+        "scheme_name"     : "Scheme Name",
+        "transaction_type": "Transaction Type",
+        "transaction_date": "Date",
+        "units"           : "Units",
+        "nav"             : "NAV",
+        "amount"          : "Amount",
+    })
+    keep = ["Scheme Name", "Transaction Type", "Date", "Units", "NAV", "Amount"]
+    return df[[c for c in keep if c in df.columns]].copy()
+
+
+def generate_groww_equity_trades(**kwargs): return make_groww_equity(**kwargs)
+def generate_groww_fo_trades(**kwargs):     return make_groww_fno(**kwargs)
+def generate_groww_mf_trades(**kwargs):     return make_groww_mf(**kwargs)
+
 if __name__ == "__main__":
     eq = make_equity()
     fn = make_fno()

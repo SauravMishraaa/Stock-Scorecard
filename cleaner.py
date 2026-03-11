@@ -85,7 +85,7 @@ def _map_columns(df: pd.DataFrame, rules: dict) -> pd.DataFrame:
 
 # Equity Cleaning
 _EQ_COL_RULES = {
-    "symbol"     : ["symbol", "tradingsymbol", "scrip"],
+    "symbol"     : ["symbol", "tradingsymbol", "scrip", "stock_symbol", "scrip_name"],
     "trade_type" : ["trade_type", "transaction_type", "buy_sell", "side", "type"],
     "quantity"   : ["quantity", "qty"],
     "price"      : ["price", "rate", "avg_price", "average_price"],
@@ -93,7 +93,7 @@ _EQ_COL_RULES = {
     "isin"       : ["isin"],
     "exchange"   : ["exchange"],
     "series"     : ["series"],
-    "order_id"   : ["order_id", "order_no"],
+    "order_id"   : ["order_id", "order_no", "trade_id"],
 }
 
 _EQ_REQUIRED = ["symbol", "trade_type", "quantity", "price", "trade_date"]
@@ -126,7 +126,7 @@ def clean_equity(df: pd.DataFrame):
 
 # FNO Cleaning
 _FNO_COL_RULES = {
-    "symbol"          : ["symbol", "tradingsymbol", "scrip", "instrument"],
+    "symbol"          : ["symbol", "tradingsymbol", "scrip", "instrument", "stock_symbol", "scrip_name"],
     "trade_type"      : ["trade_type", "transaction_type", "buy_sell", "side"],
     "quantity"        : ["quantity", "qty"],
     "price"           : ["price", "rate", "avg_price", "average_price", "trade_price"],
@@ -135,7 +135,7 @@ _FNO_COL_RULES = {
     "strike_price"    : ["strike_price", "strike"],
     "instrument_type" : ["instrument_type", "option_type", "call_put"],
     "exchange"        : ["exchange"],
-    "order_id"        : ["order_id", "order_no"],
+    "order_id"        : ["order_id", "order_no", "trade_id"],
 }
 
 _FNO_REQUIRED = ["symbol", "trade_type", "quantity", "price", "trade_date"]
