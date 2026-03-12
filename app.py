@@ -636,6 +636,20 @@ if eq_sc or fo_sc or mf_sc:
     s4.metric("Overall ROI",        f"{roi:.1f}%")
     st.divider()
 
+    # PDF Export
+    pdf_bytes = generate_scorecard_pdf(eq_sc, fo_sc, mf_sc, tax_eq, tax_fo, broker=broker)
+    if pdf_bytes:
+        st.download_button(
+            "⬇ Download PDF Report",
+            data=pdf_bytes,
+            file_name=f"scorecard_{datetime.now().strftime('%Y%m%d')}.pdf",
+            mime="application/pdf",
+        )
+    elif pdf_bytes is None:
+        st.caption("💡 Install reportlab (`uv add reportlab or pip install reportlab`) to enable PDF export.")
+    
+    st.divider()
+
     tab_labels = []
     if eq_sc: tab_labels.append("📈 Equity")
     if fo_sc: tab_labels.append("⚡ F&O")
@@ -660,16 +674,6 @@ if eq_sc or fo_sc or mf_sc:
         idx += 1
 
     with tabs[idx]:
-        pdf_bytes = generate_scorecard_pdf(eq_sc, fo_sc, mf_sc, tax_eq, tax_fo, broker=broker)
-        if pdf_bytes:
-            st.download_button(
-                "⬇ Download PDF Report",
-                data=pdf_bytes,
-                file_name=f"scorecard_{datetime.now().strftime('%Y%m%d')}.pdf",
-                mime="application/pdf",
-            )
-        elif pdf_bytes is None:
-            st.caption("💡 Install reportlab (`pip install reportlab`) to enable PDF export.")
         st.markdown('<div class="section-tag">Cleaned Data Preview</div>', unsafe_allow_html=True)
         if eq_combined is not None and not eq_combined.empty:
             st.markdown("**Equity / F&O Tradebook**")
