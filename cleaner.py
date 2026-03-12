@@ -85,7 +85,7 @@ def _map_columns(df: pd.DataFrame, rules: dict) -> pd.DataFrame:
 
 # Equity Cleaning
 _EQ_COL_RULES = {
-    "symbol"     : ["symbol", "tradingsymbol", "scrip", "stock_symbol", "scrip_name"],
+    "symbol"     : ["symbol", "tradingsymbol", "scrip", "stock_symbol", "scrip_name", "trading_symbol"],
     "trade_type" : ["trade_type", "transaction_type", "buy_sell", "side", "type"],
     "quantity"   : ["quantity", "qty"],
     "price"      : ["price", "rate", "avg_price", "average_price"],

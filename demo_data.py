@@ -344,6 +344,59 @@ def generate_groww_equity_trades(**kwargs): return make_groww_equity(**kwargs)
 def generate_groww_fo_trades(**kwargs):     return make_groww_fno(**kwargs)
 def generate_groww_mf_trades(**kwargs):     return make_groww_mf(**kwargs)
 
+# Angel One-format  demo generators
+def make_angel_equity(**kwargs) -> pd.DataFrame:
+    """Equity demo data with Angel One column names."""
+    df = make_equity(**kwargs)
+    df = df.rename(columns={
+        "symbol"    : "Trading Symbol",
+        "trade_type": "Transaction Type",
+        "trade_date": "Trade Date",
+        "quantity"  : "Qty",
+        "price"     : "Price",
+        "exchange"  : "Exchange",
+        "order_id"  : "Trade Id",
+    })
+    keep = ["Trading Symbol", "Exchange", "Transaction Type", "Qty", "Price", "Trade Date", "Trade Id"]
+    return df[[c for c in keep if c in df.columns]].copy()
+
+def make_angel_fno(**kwargs) -> pd.DataFrame:
+    """F&O demo data with Angel One column names."""
+    df = make_fno(**kwargs)
+    df = df.rename(columns={
+        "trade_type"     : "Transaction Type",
+        "trade_date"     : "Trade Date",
+        "instrument_type": "Option Type",
+        "expiry_date"    : "Expiry",
+        "strike_price"   : "Strike",
+        "exchange"       : "Exchange",
+        "order_id"       : "Trade Id",
+        "quantity"       : "Qty",
+        "price"          : "Price",
+    })
+    keep = ["symbol", "Exchange", "Expiry", "Strike", "Option Type",
+            "Transaction Type", "Qty", "Price", "Trade Date", "Trade Id"]
+    return df[[c for c in keep if c in df.columns]].copy()
+
+def make_angel_mf(**kwargs) -> pd.DataFrame:
+    """MF demo data with Angel One column names."""
+    df = make_mf(**kwargs)
+    df = df.rename(columns={
+        "scheme_name"     : "Fund Name",
+        "transaction_type": "Transaction Type",
+        "transaction_date": "Date",
+        "units"           : "Units",
+        "nav"             : "NAV",
+        "amount"          : "Amount",
+    })
+    keep = ["Fund Name", "Transaction Type", "Date", "Units", "NAV", "Amount"]
+    return df[[c for c in keep if c in df.columns]].copy()
+
+
+def generate_angel_equity_trades(**kwargs):  return make_angel_equity(**kwargs)
+def generate_angel_fo_trades(**kwargs):      return make_angel_fno(**kwargs)
+def generate_angel_mf_trades(**kwargs):      return make_angel_mf(**kwargs)
+
 if __name__ == "__main__":
     eq = make_equity()
     fn = make_fno()

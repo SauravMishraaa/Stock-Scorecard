@@ -4,12 +4,16 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 import io
+from datetime import datetime
 
 from cleaner import clean_tradebook, split_segments
 from scorecard import compute_equity_scorecard, compute_fo_scorecard, compute_mf_scorecard
 from demo_data import (generate_equity_trades, generate_fo_trades, generate_mf_trades,
-                       generate_groww_equity_trades, generate_groww_fo_trades, generate_groww_mf_trades)
-
+                       generate_groww_equity_trades, generate_groww_fo_trades, generate_groww_mf_trades,
+                       generate_angel_equity_trades, generate_angel_fo_trades, generate_angel_mf_trades)
+from live_prices import enrich_open_positions, fetch_benchmark
+from tax import compute_equity_tax, compute_fno_tax
+from pdf_export import generate_scorecard_pdf
 
 st.set_page_config(
     page_title="Stock Scorecard",
@@ -67,7 +71,7 @@ hr { border-color: #1e1e32 !important; }
 
 .sc-title {
     font-family: 'Syne', sans-serif;
-    font-size: 2.2rem;
+    font-size: 3rem;
     font-weight: 800;
     color: #00ff87;
     line-height: 1;
@@ -208,6 +212,30 @@ def top_symbols_bar(top_df):
     fig.update_xaxes(tickprefix="₹")
     return fig
 
+def benchmark_chart(cum_df, benchmark_df, start_capital):
+    """Overlay portfolio cumulative P&L with Nifty 50 normalised returns."""
+    fig = go.Figure()
+
+    # Portfolio line
+    fig.add_trace(go.Scatter(
+        x=cum_df["sell_date"], y=cum_df["cum_pnl"],
+        mode="lines", name="Portfolio P&L",
+        line=dict(color=GREEN, width=2),
+        hovertemplate="%{x|%d %b %Y}<br>P&L: ₹%{y:,.0f}<extra></extra>",
+    ))
+
+    # Benchmark line (scale Nifty % return to ₹ equivalent)
+    if not benchmark_df.empty and start_capital > 0:
+        bm = benchmark_df.copy()
+        bm["scaled"] = (bm["benchmark_value"] - 100) / 100 * start_capital
+        fig.add_trace(go.Scatter(
+            x=bm["date"], y=bm["scaled"],
+            mode="lines", name="Nifty 50 (equivalent ₹)",
+            line=dict(color=AMBER, width=1.5, dash="dot"),
+            hovertemplate="%{x|%d %b %Y}<br>Nifty equiv: ₹%{y:,.0f}<extra></extra>",
+        ))
+
+    return plot_layout(fig, "Portfolio vs Nifty 50", height=320)
 
 # Tab renderers
 
@@ -234,7 +262,11 @@ def render_equity_tab(sc):
         trades = sc["trades_df"]
         col_a, col_b = st.columns([2, 1])
         with col_a:
-            st.plotly_chart(cum_pnl_chart(sc["cum_pnl"]), use_container_width=True)
+            if not benchmark_df.empty:
+                cap = sc.get("total_buy_value", 0)
+                st.plotly_chart(benchmark_chart(sc["cum_pnl"], benchmark_df, cap), use_container_width=True)
+            else:
+                st.plotly_chart(cum_pnl_chart(sc["cum_pnl"]), use_container_width=True)
         with col_b:
             st.plotly_chart(win_loss_donut(sc.get("win_count",0), sc.get("loss_count",0)),
                             use_container_width=True)
@@ -274,9 +306,15 @@ def render_equity_tab(sc):
     pos = sc.get("open_positions")
     if pos is not None and not pos.empty:
         st.markdown('<div class="section-tag">Open Positions</div>', unsafe_allow_html=True)
+        unreal_total = pos["unrealised_pnl"].sum() if "unrealised_pnl" in pos.columns else None
+        if unreal_total is not None:
+            st.metric("Total Unrealised P&L", fmt_inr(unreal_total),
+                    delta="▲ Profit" if unreal_total >= 0 else "▼ Loss")
         dp = pos.copy()
-        dp.columns = [c.replace("_"," ").title() for c in dp.columns]
+        dp.columns = [c.replace("_", " ").title() for c in dp.columns]
         st.dataframe(dp, use_container_width=True, hide_index=True)
+        if "live_price" in pos.columns and pos["live_price"].isna().all():
+            st.caption("💡 Install yfinance (`pip install yfinance`) to see live prices.")
 
     if sc.get("has_trades"):
         with st.expander("📋 All Closed Trades"):
@@ -367,7 +405,7 @@ BROKER_CONFIG = {
         "eq_label"    : "Equity + F&O Tradebook",
         "fo_label"    : None,
         "mf_label"    : "Mutual Fund Tradebook",
-        "demo_note"   : "Synthetic Zerodha-style trades (2021–2025).",
+        "demo_note"   : "Synthetic Zerodha-style trades (2021-2025).",
         "start_title" : "Upload your Zerodha tradebook to begin",
         "start_hint"  : "Console → Reports → Tradebook → Download CSV",
     },
@@ -377,17 +415,62 @@ BROKER_CONFIG = {
         "eq_label"    : "Stock Tradebook (CSV)",
         "fo_label"    : "F&O Tradebook (CSV)",
         "mf_label"    : "Mutual Fund Statement (CSV)",
-        "demo_note"   : "Synthetic Groww-style trades (2021–2025).",
+        "demo_note"   : "Synthetic Groww-style trades (2021-2025).",
         "start_title" : "Upload your Groww reports to begin",
         "start_hint"  : "Groww app → P&amp;L → Download Report",
     },
+    "Angel One": {
+        "subtitle"    : "Angel One Portfolio Analyser",
+        "caption"     : "Angel One app → Reports → Download CSV",
+        "eq_label"    : "Equity Tradebook (CSV)",
+        "fo_label"    : "F&O Tradebook (CSV)",
+        "mf_label"    : "Mutual Fund Statement (CSV)",
+        "demo_note"   : "Synthetic Angel One-style trades (2021-2025).",
+        "start_title" : "Upload your Angel One reports to begin",
+        "start_hint"  : "Angel One app → Reports → Download CSV",
+    },
 }
+
+def render_tax_tab(tax_eq, tax_fo):
+    if tax_eq:
+        st.markdown('<div class="section-tag">Equity Tax (STCG / LTCG)</div>', unsafe_allow_html=True)
+        t1, t2, t3, t4 = st.columns(4)
+        t1.metric("STCG Gains",    fmt_inr(tax_eq["stcg_gains"]))
+        t2.metric("STCG Tax @15%", fmt_inr(tax_eq["stcg_tax"]))
+        t3.metric("LTCG Gains",    fmt_inr(tax_eq["ltcg_gains"]))
+        t4.metric("LTCG Tax @10%", fmt_inr(tax_eq["ltcg_tax"]))
+
+        u1, u2, u3, u4 = st.columns(4)
+        u1.metric("Net STCG",      fmt_inr(tax_eq["net_stcg"]))
+        u2.metric("Net LTCG",      fmt_inr(tax_eq["net_ltcg"]))
+        u3.metric("LTCG Exempt",   fmt_inr(tax_eq["ltcg_exemption"]))
+        u4.metric("Total Est. Tax",fmt_inr(tax_eq["total_tax"]),
+                  delta=f"{tax_eq['stcg_count']} STCG · {tax_eq['ltcg_count']} LTCG trades")
+
+        st.caption("⚠️ Estimate only — consult a CA for precise tax liability. "
+                   "STCG @15% (Sec 111A), LTCG @10% above ₹1L exemption (Sec 112A).")
+
+        if not tax_eq["breakdown_df"].empty:
+            with st.expander("📋 Trade-level STCG/LTCG Breakdown"):
+                bd = tax_eq["breakdown_df"].copy()
+                bd["buy_date"]  = bd["buy_date"].dt.strftime("%d %b %Y")
+                bd["sell_date"] = bd["sell_date"].dt.strftime("%d %b %Y")
+                bd.columns = [c.replace("_", " ").title() for c in bd.columns]
+                st.dataframe(bd, use_container_width=True, hide_index=True)
+
+    if tax_fo:
+        st.markdown('<div class="section-tag">F&O Tax (Business Income)</div>', unsafe_allow_html=True)
+        f1, f2, f3 = st.columns(3)
+        f1.metric("Net F&O Profit",     fmt_inr(tax_fo["net_profit"]))
+        f2.metric("Indicative Tax @30%",fmt_inr(tax_fo["estimated_tax"]))
+        f3.metric("Tax Rate",           "30% slab")
+        st.caption("⚠️ F&O P&L is business income — set-off rules and audit requirements apply.")
 
 with st.sidebar:
     st.markdown('<div class="sc-title" style="font-size:1.4rem;margin-bottom:0.3rem">📊 SCORECARD</div>',
                 unsafe_allow_html=True)
     st.divider()
-    broker = st.selectbox("Broker", ["Zerodha", "Groww"], key="broker")
+    broker = st.selectbox("Broker", ["Zerodha", "Groww", "Angel One"], key="broker")
     cfg    = BROKER_CONFIG[broker]
     st.markdown(f'<div style="color:#3d3d5e;font-size:0.7rem;letter-spacing:0.12em;'
                 f'text-transform:uppercase;margin-bottom:0.5rem">{cfg["subtitle"]}</div>',
@@ -413,7 +496,6 @@ with st.sidebar:
     P&amp;L uses <b style="color:#555">FIFO</b> matching.
     </div>
     """, unsafe_allow_html=True)
-
 
 @st.cache_data(show_spinner=False)
 def load_and_clean(eq_bytes, fo_bytes, mf_bytes):
@@ -450,6 +532,10 @@ if use_demo and not any([eq_bytes, fo_bytes, mf_bytes]):
             eq_raw = generate_groww_equity_trades()
             fo_raw = generate_groww_fo_trades()
             mf_raw = generate_groww_mf_trades()
+        elif broker == "Angel One":
+            eq_raw = generate_angel_equity_trades()
+            fo_raw = generate_angel_fo_trades()
+            mf_raw = generate_angel_mf_trades()
         else:
             eq_raw = generate_equity_trades()
             fo_raw = generate_fo_trades()
@@ -483,6 +569,32 @@ eq_sc = compute_equity_scorecard(eq_only)   if (eq_only   is not None and not eq
 fo_sc = compute_fo_scorecard(fo_only)       if (fo_only   is not None and not fo_only.empty)   else None
 mf_sc = compute_mf_scorecard(mf_cleaned)   if (mf_cleaned is not None and not mf_cleaned.empty) else None
 
+# Enrichments
+tax_eq = compute_equity_tax(eq_sc["trades_df"]) if eq_sc and eq_sc.get("has_trades") else None
+tax_fo = compute_fno_tax(fo_sc["trades_df"])    if fo_sc and fo_sc.get("has_trades") else None
+
+# Enrich open positions with live prices (cached per session to avoid API hammering)
+@st.cache_data(ttl=300, show_spinner=False)
+def _get_open_pos_enriched(pos_json):
+    import pandas as pd
+    pos = pd.read_json(pos_json)
+    return enrich_open_positions(pos)
+
+if eq_sc and eq_sc.get("open_positions") is not None and not eq_sc["open_positions"].empty:
+    eq_sc["open_positions"] = _get_open_pos_enriched(
+        eq_sc["open_positions"].to_json()
+    )
+
+# Benchmark
+@st.cache_data(ttl=3600, show_spinner=False)
+def _get_benchmark(start, end):
+    return fetch_benchmark(start, end)
+
+benchmark_df = pd.DataFrame(columns=["date", "benchmark_value"])
+if eq_sc and eq_sc.get("has_trades") and not eq_sc["cum_pnl"].empty:
+    start_str = eq_sc["cum_pnl"]["sell_date"].min().strftime("%Y-%m-%d")
+    end_str   = eq_sc["cum_pnl"]["sell_date"].max().strftime("%Y-%m-%d")
+    benchmark_df = _get_benchmark(start_str, end_str)
 
 # Main UI
 
@@ -528,6 +640,7 @@ if eq_sc or fo_sc or mf_sc:
     if eq_sc: tab_labels.append("📈 Equity")
     if fo_sc: tab_labels.append("⚡ F&O")
     if mf_sc: tab_labels.append("🏦 Mutual Funds")
+    if tax_eq or tax_fo: tab_labels.append("🧾 Tax")
     tab_labels.append("📂 Raw Data")
 
     tabs = st.tabs(tab_labels)
@@ -542,8 +655,21 @@ if eq_sc or fo_sc or mf_sc:
     if mf_sc:
         with tabs[idx]: render_mf_tab(mf_sc)
         idx += 1
+    if tax_eq or tax_fo:
+        with tabs[idx]: render_tax_tab(tax_eq, tax_fo)
+        idx += 1
 
     with tabs[idx]:
+        pdf_bytes = generate_scorecard_pdf(eq_sc, fo_sc, mf_sc, tax_eq, tax_fo, broker=broker)
+        if pdf_bytes:
+            st.download_button(
+                "⬇ Download PDF Report",
+                data=pdf_bytes,
+                file_name=f"scorecard_{datetime.now().strftime('%Y%m%d')}.pdf",
+                mime="application/pdf",
+            )
+        elif pdf_bytes is None:
+            st.caption("💡 Install reportlab (`pip install reportlab`) to enable PDF export.")
         st.markdown('<div class="section-tag">Cleaned Data Preview</div>', unsafe_allow_html=True)
         if eq_combined is not None and not eq_combined.empty:
             st.markdown("**Equity / F&O Tradebook**")

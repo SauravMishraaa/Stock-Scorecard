@@ -2,6 +2,7 @@ from __future__ import annotations
 import pandas as pd
 import numpy as np
 from datetime import datetime
+from tax import compute_equity_tax
 
 def _fifo_closed_trades(df: pd.DataFrame):
     # Match BUY lots against SELLs with FIFO.
@@ -130,6 +131,7 @@ def compute_equity_scorecard(df: pd.DataFrame) -> dict:
     closed, open_lots = _fifo_closed_trades(df)
     open_pos          = _build_open_positions(open_lots)
 
+
     if not closed:
         sc = empty.copy()
         sc["open_positions"]  = open_pos
@@ -194,6 +196,7 @@ def compute_equity_scorecard(df: pd.DataFrame) -> dict:
         "monthly_pnl"         : _monthly_pnl_df(trades),
         "top_symbols"         : top_sym,
         "open_positions"      : open_pos,
+        "tax_summary"         : compute_equity_tax(trades),
     }
 
 
@@ -210,6 +213,7 @@ def _empty_equity_scorecard() -> dict:
         "monthly_pnl": pd.DataFrame(columns=["month", "realized_pnl"]),
         "top_symbols": pd.DataFrame(columns=["symbol", "trade_value"]),
         "open_positions": pd.DataFrame(),
+        "tax_summary": {},
     }
 
 
