@@ -245,10 +245,8 @@ def render_equity_tab(sc):
     pf  = sc.get("profit_factor", 0)
 
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Realised P&L", fmt_inr(pnl),
-              delta=f"{'▲' if pnl >= 0 else '▼'} {abs(pnl)/max(sc.get('total_buy_value',1),1)*100:.1f}% of capital")
-    c2.metric("Win Rate", f"{sc.get('win_rate',0):.1f}%",
-              delta=f"{sc.get('win_count',0)}W / {sc.get('loss_count',0)}L")
+    c1.metric("Realised P&L", fmt_inr(pnl))
+    c2.metric("Win Rate", f"{sc.get('win_rate',0):.1f}%")
     c3.metric("Profit Factor", f"{min(pf,99):.2f}x")
     c4.metric("Avg Hold",      f"{sc.get('avg_holding_days',0):.0f} days")
 
@@ -334,8 +332,7 @@ def render_fo_tab(sc):
 
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Realised P&L",  fmt_inr(pnl))
-    c2.metric("Win Rate",      f"{sc.get('win_rate',0):.1f}%",
-              delta=f"{sc.get('win_count',0)}W / {sc.get('loss_count',0)}L")
+    c2.metric("Win Rate",      f"{sc.get('win_rate',0):.1f}%")
     c3.metric("Profit Factor", f"{min(pf,99):.2f}x")
     c4.metric("Instruments",   str(sc.get("unique_instruments", 0)))
 
@@ -444,8 +441,7 @@ def render_tax_tab(tax_eq, tax_fo):
         u1.metric("Net STCG",      fmt_inr(tax_eq["net_stcg"]))
         u2.metric("Net LTCG",      fmt_inr(tax_eq["net_ltcg"]))
         u3.metric("LTCG Exempt",   fmt_inr(tax_eq["ltcg_exemption"]))
-        u4.metric("Total Est. Tax",fmt_inr(tax_eq["total_tax"]),
-                  delta=f"{tax_eq['stcg_count']} STCG · {tax_eq['ltcg_count']} LTCG trades")
+        u4.metric("Total Est. Tax",fmt_inr(tax_eq["total_tax"]))
 
         st.caption("⚠️ Estimate only — consult a CA for precise tax liability. "
                    "STCG @15% (Sec 111A), LTCG @10% above ₹1L exemption (Sec 112A).")
@@ -629,8 +625,7 @@ if eq_sc or fo_sc or mf_sc:
     roi = total_pnl / max(total_cap, 1) * 100
 
     s1, s2, s3, s4 = st.columns(4)
-    s1.metric("Total Realised P&L", fmt_inr(total_pnl),
-              delta="Profit" if total_pnl >= 0 else "Loss")
+    s1.metric("Total Realised P&L", fmt_inr(total_pnl))
     s2.metric("Capital Deployed",   fmt_inr(total_cap))
     s3.metric("Closed Trades",      f"{total_tr:,}")
     s4.metric("Overall ROI",        f"{roi:.1f}%")
