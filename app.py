@@ -629,8 +629,7 @@ if eq_sc or fo_sc or mf_sc:
     roi = total_pnl / max(total_cap, 1) * 100
 
     s1, s2, s3, s4 = st.columns(4)
-    s1.metric("Total Realised P&L", fmt_inr(total_pnl),
-              delta="Profit" if total_pnl >= 0 else "Loss")
+    s1.metric("Total Realised P&L", fmt_inr(total_pnl))
     s2.metric("Capital Deployed",   fmt_inr(total_cap))
     s3.metric("Closed Trades",      f"{total_tr:,}")
     s4.metric("Overall ROI",        f"{roi:.1f}%")
