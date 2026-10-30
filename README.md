@@ -87,7 +87,7 @@ No corporate action adjustments (splits, bonus) in FIFO matching.
 
 ## Installation
 
-Requires Python 3.9+. Install uv if you haven't:
+Requires Python 3.10+. Install uv if you haven't:
 
 ```bash
 pip install uv
